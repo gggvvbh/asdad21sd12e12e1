@@ -1,0 +1,79 @@
+diff --git a/node_modules/prismarine-block/index.js b/node_modules/prismarine-block/index.js
+index 7cb8f66..2780fa5 100644
+--- a/node_modules/prismarine-block/index.js
++++ b/node_modules/prismarine-block/index.js
+@@ -328,7 +328,7 @@ function provider (registry, { Biome, version, features }) {
+ 
+       // If breaking delta is more than 1.0 per tick, the block is broken instantly, so return 0
+       if (blockBreakingDelta >= 1.0) {
+-        return 0
++        blockBreakingDelta = 1
+       }
+ 
+       // Determine how many ticks breaking will take, then convert to millis and return result
+@@ -337,9 +337,64 @@ function provider (registry, { Biome, version, features }) {
+       const ticksToBreakBlock = Math.ceil(1.0 / blockBreakingDelta)
+       return ticksToBreakBlock * 50
+     }
++
++    instantDig(heldItemType, creative, inWater, notOnGround, enchantments = [], effects = {}) {
++
++      if (creative) return true
++
++      const materialToolMultipliers = registry.materials[this.material]
++      const isBestTool = heldItemType && materialToolMultipliers && materialToolMultipliers[heldItemType]
++
++      let blockBreakingSpeed = 1
++
++      if (isBestTool) {
++        blockBreakingSpeed = materialToolMultipliers[heldItemType]
++      }
++
++      const efficiencyLevel = getEnchantmentLevel('efficiency', enchantments)
++      if (efficiencyLevel > 0 && blockBreakingSpeed > 1.0) {
++        blockBreakingSpeed += efficiencyLevel * efficiencyLevel + 1
++      }
++
++      const hasteLevel = Math.max(
++        getEffectLevel('Haste', effects),
++        getEffectLevel('ConduitPower', effects))
++
++      if (hasteLevel > 0) {
++        blockBreakingSpeed *= 1 + (0.2 * hasteLevel)
++      }
++
++      const miningFatigueLevel = getEffectLevel('MiningFatigue', effects)
++
++      if (miningFatigueLevel > 0) {
++        blockBreakingSpeed *= getMiningFatigueMultiplier(miningFatigueLevel)
++      }
++
++      const aquaAffinityLevel = getEnchantmentLevel('aqua_affinity', enchantments)
++
++      if (inWater && aquaAffinityLevel === 0) {
++        blockBreakingSpeed /= 5.0
++      }
++
++      if (notOnGround) {
++        blockBreakingSpeed /= 5.0
++      }
++
++      const blockHardness = this.hardness
++      const matchingToolMultiplier = this.canHarvest(heldItemType) ? 30.0 : 100.0
++
++      const damage = blockBreakingSpeed / blockHardness / matchingToolMultiplier
++
++      if (damage > 1) {
++        return true
++      } else {
++        return false
++      }
++    }
+   }
+ 
+-  function parseValue (value, state) {
++
++  function parseValue(value, state) {
+     if (state.type === 'enum') {
+       return state.values.indexOf(value)
+     }

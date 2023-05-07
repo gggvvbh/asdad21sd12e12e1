@@ -1,0 +1,23 @@
+{
+  "name": "bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "patch-package"
+  },
+  "author": "goncharovchik",
+  "engines": {
+    "node": "14"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "mineflayer": "4.6.0",
+    "mineflayer-pathfinder": "^2.0.0",
+    "mineflayer-tps": "^1.0.1",
+    "patch-package": "^6.5.1",
+    "prismarine-block": "1.16.3",
+    "sharp": "^0.30.7",
+    "telegraf": "^4.8.5"
+  }
+}

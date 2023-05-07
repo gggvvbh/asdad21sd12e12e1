@@ -1,0 +1,136 @@
+diff --git a/node_modules/mineflayer/lib/plugins/digging.js b/node_modules/mineflayer/lib/plugins/digging.js
+index 817447e..a3d9519 100644
+--- a/node_modules/mineflayer/lib/plugins/digging.js
++++ b/node_modules/mineflayer/lib/plugins/digging.js
+@@ -14,17 +14,17 @@ function inject (bot) {
+   bot.targetDigBlock = null
+   bot.lastDigTime = null
+ 
+-  async function dig (block, forceLook, digFace) {
++  async function dig(block, forceLook, digFace) {
+     if (block === null || block === undefined) {
+       throw new Error('dig was called with an undefined or null block')
+     }
+     if (!digFace || typeof digFace === 'function') {
+-      digFace = 'auto'
++      digFace = 1
+     }
+ 
+     if (bot.targetDigBlock) bot.stopDigging()
+ 
+-    let diggingFace = 1 // Default (top)
++    let diggingFace = digFace
+ 
+     if (forceLook !== 'ignore') {
+       if (digFace?.x || digFace?.y || digFace?.z) {
+@@ -117,9 +117,9 @@ function inject (bot) {
+ 
+     swingInterval = setInterval(() => {
+       bot.swingArm()
+-    }, 350)
++    }, 50)
+ 
+-    function finishDigging () {
++    function finishDigging() {
+       clearInterval(swingInterval)
+       clearTimeout(waitTimeout)
+       swingInterval = null
+@@ -221,12 +221,37 @@ function inject (bot) {
+     )
+   }
+ 
++  function instantDig(block) {
++    let type = null
++    let enchantments = []
++
++    // Retrieve currently held item ID and active enchantments from heldItem
++    const currentlyHeldItem = bot.heldItem
++    if (currentlyHeldItem) {
++      type = currentlyHeldItem.type
++      enchantments = currentlyHeldItem.enchants
++    }
++
++    // Append helmet enchantments (because Aqua Affinity actually affects dig speed)
++    const headEquipmentSlot = bot.getEquipmentDestSlot('head')
++    const headEquippedItem = bot.inventory.slots[headEquipmentSlot]
++    if (headEquippedItem) {
++      const helmetEnchantments = headEquippedItem.enchants
++      enchantments = enchantments.concat(helmetEnchantments)
++    }
++
++    const creative = bot.game.gameMode === 'creative'
++
++    return block.instantDig(type, creative, bot.entity.isInWater, !bot.entity.onGround, enchantments, bot.entity.effects);
++  }
++
+   bot.dig = dig
+   bot.stopDigging = noop
+   bot.canDigBlock = canDigBlock
+   bot.digTime = digTime
++  bot.instantDig = instantDig
+ }
+ 
+-function noop (err) {
++function noop(err) {
+   if (err) throw err
+ }
+diff --git a/node_modules/mineflayer/lib/plugins/entities.js b/node_modules/mineflayer/lib/plugins/entities.js
+index 8d67a47..335145b 100644
+--- a/node_modules/mineflayer/lib/plugins/entities.js
++++ b/node_modules/mineflayer/lib/plugins/entities.js
+@@ -265,6 +265,27 @@ function inject (bot) {
+     // entity velocity
+     const entity = fetchEntity(packet.entityId)
+     const notchVel = new Vec3(packet.velocityX, packet.velocityY, packet.velocityZ)
++
++    if (packet.entityId == bot.entity.id) return bot.entity.velocity.update(conv.fromNotchVelocity(notchVel));
++
++    if (entity.type == 'player' || entity.type == 'mob') {
++      let x1 = entity.position.x
++      let y1 = entity.position.y
++      let z1 = entity.position.z
++      let x2 = bot.entity.position.x
++      let y2 = bot.entity.position.y
++      let z2 = bot.entity.position.z
++
++      if (x1 < x2) [x1, x2] = [x2, x1];
++      if (y1 < y2) [y1, y2] = [y2, y1];
++      if (z1 < z2) [z1, z2] = [z2, z1];
++
++      if ((x1 - x2 < 0.6) && (z1 - z2 < 0.6) && (y1 - y2 < 1.62)) {
++        const notchVel_collision = new Vec3(-packet.velocityX, -627, -packet.velocityZ)
++        bot.entity.velocity.update(conv.fromNotchVelocity(notchVel_collision))
++      }
++    }
++
+     entity.velocity.update(conv.fromNotchVelocity(notchVel))
+   })
+ 
+diff --git a/node_modules/mineflayer/lib/plugins/inventory.js b/node_modules/mineflayer/lib/plugins/inventory.js
+index 85e545e..022f2ec 100644
+--- a/node_modules/mineflayer/lib/plugins/inventory.js
++++ b/node_modules/mineflayer/lib/plugins/inventory.js
+@@ -143,19 +143,17 @@ function inject (bot, { hideErrors }) {
+       }
+     }
+ 
+-    async function tossLeftover () {
++    async function tossLeftover() {
+       if (window.selectedItem) {
+         await clickWindow(-999, 0, 0)
+       }
+     }
+   }
+ 
+-  async function activateBlock (block, direction, cursorPos) {
+-    direction = direction ?? new Vec3(0, 1, 0)
+-    const directionNum = vectorToDirection(direction) // The packet needs a number as the direction
++  async function activateBlock(block, direction, cursorPos) {
++    directionNum = direction ?? new Vec3(0, 1, 0)
+     cursorPos = cursorPos ?? new Vec3(0.5, 0.5, 0.5)
+-    // TODO: tell the server that we are not sneaking while doing this
+-    await bot.lookAt(block.position.offset(0.5, 0.5, 0.5), false)
++
+     // place block message
+     if (bot.supportFeature('blockPlaceHasHeldItem')) {
+       bot._client.write('block_place', {
